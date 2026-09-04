@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "typeRoots": ["./node_modules/@types"],
+        "module": "esnext",
+        "target": "esnext",
+        "lib": ["es2020", "dom"],
+        "moduleResolution": "node",
+        "strict": true,
+        "importHelpers": true,
+        "noEmit": true,
+        "skipLibCheck": true
+    },
+    "include": ["main.ts", "src/**/*.ts", "tests/**/*.ts"]
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/*
+!dist/markedit-css-colors.js
+!dist/lib/
+
+# Tooling caches
+.memsearch/
+.specstory/
+.superpowers/
