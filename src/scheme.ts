@@ -11,6 +11,7 @@ const DARK_QUERY = '(prefers-color-scheme: dark)'
 const listeners = new Set<() => void>()
 
 const tracking: {
+    mediaQuery?: MediaQueryList
     observer?: MutationObserver
     observedEditor?: Element
     pendingFrame?: number
@@ -28,11 +29,6 @@ const tracking: {
 export function onSchemeChange(listener: () => void): () => void {
     listeners.add(listener)
     startTracking()
-
-    // A subscriber should hear about a change from here on, never one already in
-    // flight (mutated, not yet reported) when it joined: resync the baseline on
-    // every subscribe, not only the one that starts tracking.
-    tracking.reported = resolveScheme()
 
     return () => {
         listeners.delete(listener)
@@ -56,6 +52,15 @@ function startTracking() {
 
     const observer = new MutationObserver(scheduleUpdate)
     tracking.observer = observer
+    tracking.reported = resolveScheme()
+
+    // matchMedia() hands back a new MediaQueryList on every call, so the object a
+    // later, freshly obtained `removeEventListener` call would resolve to is never
+    // the one `addEventListener` landed on — hold onto this exact instance so
+    // teardown detaches the listener it actually attached.
+    const mediaQuery = matchMedia(DARK_QUERY)
+    tracking.mediaQuery = mediaQuery
+    mediaQuery.addEventListener('change', scheduleUpdate)
 
     // A theme swap reconfigures CodeMirror's theme compartment, which appends the
     // new rules to <head> and puts a freshly generated class on `.cm-editor`. The
@@ -65,17 +70,17 @@ function startTracking() {
     observer.observe(document.head, { childList: true })
     observer.observe(document.documentElement, ATTRIBUTES)
     observer.observe(document.body, { ...ATTRIBUTES, childList: true })
-    matchMedia(DARK_QUERY).addEventListener('change', scheduleUpdate)
 
     observeEditor(observer)
 }
 
 function stopTracking() {
     tracking.observer?.disconnect()
-    matchMedia(DARK_QUERY).removeEventListener('change', scheduleUpdate)
+    tracking.mediaQuery?.removeEventListener('change', scheduleUpdate)
 
     if (tracking.pendingFrame !== undefined) cancelAnimationFrame(tracking.pendingFrame)
 
+    tracking.mediaQuery = undefined
     tracking.observer = undefined
     tracking.observedEditor = undefined
     tracking.pendingFrame = undefined
