@@ -7,3 +7,4 @@ dist/*
 .memsearch/
 .specstory/
 .superpowers/
+.claude/worktrees/
