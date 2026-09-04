@@ -4,40 +4,75 @@ Date: 2026-09-04
 
 ## Problem
 
-Two projects parse CSS colour literals with the same parser, written twice.
+Colour-literal painting exists twice, in two languages, in two repositories.
 
-`markedit-extensions/extensions/color-highlight/color-highlight.js` (417 lines)
-holds the original: a candidate regular expression, hex and functional-form
-parsers, an HSL conversion, and a relative-luminance contrast choice, wrapped in
-a CodeMirror `ViewPlugin` and a menu item.
+`markedit-extensions/extensions/color-highlight/color-highlight.js` (417 lines) paints the CodeMirror editor: a candidate
+regular expression, hex and functional-form parsers, an HSL conversion, a relative-luminance contrast choice, a
+`ViewPlugin`, and a menu item.
 
-`MarkEdit-preview/src/shared/color.ts` (348 lines) holds a TypeScript port of
-the same parser, said so in its header, under a DOM `TreeWalker` that paints the
-rendered preview. The port added one generalisation the original lacks: a
-`refuseLineOpeningHex` option, because a hex literal that opens a line is a
-heading in Markdown source and is not one in rendered HTML.
+`MarkEdit-preview` paints the rendered preview with a TypeScript port of that parser — `src/shared/color.ts` (348 lines)
+under `src/features/colorHighlight.ts` (95 lines). The port says in its header that it is a port, and it has already
+drifted: it added a `refuseLineOpeningHex` option the original lacks, because a hex literal that opens a line is a
+Markdown heading in source and is not one in rendered HTML.
 
-A change to the parser has to be made twice, in two languages, and the two have
-already drifted by one option.
+Two implementations, two toggles in two settings namespaces, one feature.
 
-## What is shared and what is not
+## Goal
 
-Shared: reading a literal, and choosing a text colour that reads on it.
+One extension, `MarkEdit-CSS-Colors`, that paints colour literals in the editor and — when MarkEdit-preview is there —
+in the preview as well, and that does nothing about the preview when it is not.
 
-Not shared: everything about painting. The extension builds CodeMirror
-decorations over visible ranges and reads the editor background by walking up
-from `view.contentDOM`; the preview replaces text nodes with `span` elements and
-reads its background through `support/colorScheme.ts`. The two have no code in
-common and no reason to grow any.
+`markedit-extensions` loses `color-highlight` entirely. `MarkEdit-preview` loses its painter and keeps only the parser
+it still needs for resolving light and dark, which it takes from this package.
 
-The library is therefore the parser and the contrast choice, and nothing else.
+## How the preview is reached
 
-## The library
+`MarkEdit-bidirectional-preview-sync` is the precedent, and it does not use an API. It queries `.markdown-body`
+(`src/sync.ts:34`), attaches a `MutationObserver`, and does nothing when the pane never appears.
 
-Repository: `~/Projects/markedit-andy/MarkEdit-CSS-Colors`, package
-`markedit-css-colors`.
+That works because MarkEdit-preview is itself a user script in the same WebView. Its live pane is exactly
+`.markdown-body` (`src/shared/const.ts:5`), and every render refills it with `previewPane.innerHTML = html`
+(`src/view.ts:218`).
 
-### Public surface
+So this extension paints the preview from outside, with no cooperation from it. It therefore works against *upstream*
+MarkEdit-preview, not only the fork in this working tree, and it degrades to editor-only painting when the preview is
+absent, is in edit-only mode, or changes its markup in a future release.
+
+## The extension
+
+Repository `MarkEdit-CSS-Colors`, package `markedit-css-colors`, built like `MarkEdit-bidirectional-preview-sync`:
+TypeScript, vite with `markedit-vite`, one drop-in script.
+
+### Layout
+
+```text
+main.ts             wiring: settings, menu, editor extension, preview watcher
+src/color.ts        the parser and the contrast choice
+src/index.ts        library entry; re-exports the public surface of color.ts
+src/editor.ts       the CodeMirror ViewPlugin and the editor background walk
+src/preview.ts      pane discovery, the DOM painter, and the repaint observers
+src/scheme.ts       a scheme-change signal, for repainting swatches with alpha
+src/menu.ts         the menu item
+src/settings.ts     reading and persisting the toggle
+src/constants.ts    names, settings keys, selectors
+```
+
+### Two build outputs
+
+```text
+dist/markedit-css-colors.js   the drop-in user script (vite)
+dist/lib/index.js             the parser, importable (tsc)
+dist/lib/index.d.ts
+```
+
+Both are committed. `.gitignore` ignores `dist/*` and un-ignores exactly these, the way
+`MarkEdit-bidirectional-preview-sync` commits its single artifact. A git dependency has no publish step to run a build,
+and the release asset has to be in the tree.
+
+`package.json` points `main`, `types` and `exports` at `dist/lib/index.js`, and carries a `markeditRegistry` block so
+MarkEdit's Extension Manager can install it.
+
+### Library surface
 
 ```text
 parseColor(source)                          -> RGBA | undefined
@@ -48,190 +83,174 @@ isDarkColor(color)                          -> boolean
 toCssColor(rgba)                            -> string
 ```
 
-Types: `RGBA` (`{ a, b, g, r }`, channels 0..255, alpha 0..1), `ColorMatch`
-(`{ color, from, to }`), `FindColorsOptions`.
+Types: `RGBA` (`{ a, b, g, r }`, channels 0..255, alpha 0..1), `ColorMatch` (`{ color, from, to }`),
+`FindColorsOptions`.
 
-`refuseLineOpeningHex` defaults to `false`. The extension passes `true`; the
-preview passes nothing. This preserves the behaviour each has today.
+`refuseLineOpeningHex` defaults to `false`. `src/editor.ts` passes `true`, because a line that opens with `#` in
+Markdown source is a heading; `src/preview.ts` passes nothing, because the renderer has already eaten that `#`. This is
+what each side does today and it does not change.
 
-`LUMINANCE_THRESHOLD` is exported by `shared/color.ts` today and is not exported
-by the library. Nothing outside that module reads it, and `contrastColor` and
-`isDarkColor` are the interface to it.
+`LUMINANCE_THRESHOLD`, exported by `shared/color.ts` today, is not exported here. Nothing outside the module reads it,
+and `contrastColor` and `isDarkColor` are the interface to it.
 
-Nothing else changes. The library is a move, not a rewrite: the parsing rules,
-the refusals, and the numbers stay exactly as they are, and the commentary that
-explains why each refusal exists travels with the code.
+The parser text comes from `MarkEdit-preview/src/shared/color.ts`: it is the superset of the two, it is already
+TypeScript, and its `findColors` already takes the option that serves both callers. The extraction is a move. The
+parsing rules, the refusals and the numbers stay as they are, and the commentary explaining why each refusal exists
+travels with the code.
 
-### Source of the extraction
+### Names and settings
 
-`MarkEdit-preview/src/shared/color.ts` is the starting text. It is the superset
-of the two, it is already TypeScript, and its `findColors` already takes the
-option that makes it serve both callers.
+- Extension and registry name: **CSS Colors**
+- Menu item: **Highlight Colors**, a checkbox, as today
+- Settings namespace: `extension.cssColors`, holding `enabled`
 
-### Build and layout
+The namespace follows MarkEdit's convention — the package name without the `markedit-` prefix, camel-cased — as
+`markedit-bidirectional-preview-sync` uses `extension.bidirectionalPreviewSync`. It replaces two keys that both go
+away: `extension.colorHighlight` and `extension.markeditPreview.colorHighlight`. The README and CHANGELOG say so; there
+is no automatic migration for a one-line settings edit.
 
-```text
-src/index.ts        the parser
-dist/index.js       generated by tsc, ESM, committed
-dist/index.d.ts     generated by tsc, committed
-test/*.test.mjs     node --test, importing ../dist/index.js
-```
+One toggle governs both panes. Today's two independent toggles exist only because the two implementations were
+unrelated.
 
-`dist/` is committed, following `markedit-katex`, which `MarkEdit-preview`
-already consumes as a git dependency. A git dependency has no publish step to
-run a build, so the artifact has to be in the tree.
+### Painting the editor
 
-`npm test` compiles and then runs `node --test`. The tests import the compiled
-`dist/index.js` rather than the source, so they exercise the artifact that
-consumers actually load, and a broken `tsc` configuration fails the suite rather
-than shipping.
+Unchanged from `color-highlight.js`: a `ViewPlugin` builds decorations over the visible ranges only, reads the editor
+background once per build by walking up from `view.contentDOM`, and rebuilds on a document change, a viewport change,
+or the repaint effect the menu dispatches.
+
+### Painting the preview
+
+Attach: find `.markdown-body`, preferring a displayed one, as `findPreviewPane` does. A `MutationObserver` on
+`document.body` notices the pane appearing or being replaced and re-attaches.
+
+Paint: walk text nodes with a `TreeWalker`, skipping `script, style, svg, .mermaid, .katex, .color-literal`, and
+replace each literal with `<span class="color-literal">` carrying an inline background and text colour. A `<style>`
+element injected once carries `border-radius: 3px` — the whole of `MarkEdit-preview/styles/color-literal.css`. This is
+`features/colorHighlight.ts` moved, including `removeSwatches` and its `normalize` call.
+
+Repaint: on any mutation inside the pane, coalesced to one animation frame.
+
+**The feedback loop.** Our own swatches mutate `.markdown-body`, which wakes our own observer.
+`MarkEdit-bidirectional-preview-sync` never mutates and so never meets this. The observer is disconnected for the
+duration of a paint and reconnected after, and reconnecting takes the queued records first so the paint's own
+mutations are dropped rather than delivered.
+
+**Scheme changes.** A swatch with alpha shows the pane background through it, so its text colour is right only for the
+scheme it was painted in. `MarkEdit-preview` handles this through `onColorSchemeChange`; outside it, `src/scheme.ts`
+watches the same signals — `document.head` childList, the root and body attributes, and the `prefers-color-scheme`
+media query — coalesces to a frame, and repaints when the resolved scheme actually changed.
+
+**Detach.** Turning the toggle off removes the swatches, disconnects the observers, and leaves the pane as the renderer
+wrote it. Turning it on attaches and paints.
+
+### Tests
+
+vitest with happy-dom, which is what `MarkEdit-preview` already uses.
+
+- **Parser.** The merged suites: roughly 200 lines of the extension's 544 test the parser through CodeMirror
+  decorations, and `MarkEdit-preview/tests/color.test.ts` covers the same ground in 103 less thorough lines. Both
+  become direct calls on `parseColor`, `findColors`, `luminance` and `contrastColor`. Every case that exists today must
+  exist after: the extension's suite is the only thorough description of what the parser refuses and why.
+- **Editor.** The wiring the extension's suite proves, against the existing stub `Decoration`, `RangeSetBuilder`,
+  `StateEffect` and `ViewPlugin`: a literal paints with the expected style string, a dark colour takes white text,
+  offsets track a later line, a range outside the viewport is not scanned, the background walk reads an ancestor and
+  falls back to white, and `refuseLineOpeningHex: true` reaches `findColors`.
+- **Preview.** Adapted from `MarkEdit-preview/tests/colorHighlight.test.ts`: literals are wrapped, the skip list is
+  honoured, repainting replaces rather than nests, and `removeSwatches` restores the original text. Plus what is new
+  here: an absent pane paints nothing and throws nothing, a re-render repaints, and a paint does not trigger its own
+  observer.
+- **Menu and settings.** Ported unchanged from the extension's suite, against a stub `MarkEdit`: the alert-once
+  behaviour, the read-merge-write of `settings.json`, and every failure path.
 
 ### Tooling
 
-oxlint and oxfmt, pinned exactly, with the `.oxlintrc.json` and `.oxfmtrc.json`
-of `markedit-extensions`: 4-space indent, 140 columns, no semicolons, single
-quotes, avoided arrow parentheses. The moved file is reformatted to this style
-as part of the extraction.
+oxlint and oxfmt, pinned exactly, with the `.oxlintrc.json` and `.oxfmtrc.json` of `markedit-extensions`: 4-space
+indent, 140 columns, no semicolons, single quotes, avoided arrow parentheses. The moved files are reformatted to this
+style as part of the extraction. `.oxfmtrc.json` ignores `dist/`.
 
-`.oxfmtrc.json` ignores `dist/`, `package.json` and `package-lock.json`.
+The lint and secrets guards are installed and committed before any code lands.
 
-## Consumers
+## markedit-extensions
 
-### markedit-extensions
+`extensions/color-highlight/` is deleted — script, tests and README. The README loses its table row, and the CHANGELOG
+records the removal with a pointer to the new repository.
 
-The repository advertises that it has no build step and no runtime
-dependencies. That stops being true, for one extension, and the README says so
-rather than leaving the claim standing.
+Two consequences worth noting:
 
-```text
-extensions/color-highlight/
-    src/color-highlight.js    source; imports markedit-css-colors
-    color-highlight.js        generated, committed, the drop-in
-```
+- The repository's claim that it has "no build step and there are no runtime dependencies" stays **true**. Nothing is
+  added to it.
+- Its "Scope and limits" section says a user script "cannot reach the Markdown preview pane". That is wrong —
+  MarkEdit-preview renders into the same WebView, which is the whole basis of this design — and the paragraph is
+  rewritten rather than left standing.
 
-`install.sh` is untouched. It copies the top-level `*.js` of an extension
-directory and ignores subdirectories, so the generated file installs exactly as
-the hand-written one does today.
+Removing a shipped extension is a breaking change for anyone who installed it, so the version moves to 2.0.0.
 
-The source keeps `require('markedit-api')`, `require('@codemirror/view')` and
-`require('@codemirror/state')` and adds an `import` of the library. esbuild
-bundles the library in and leaves the three `require` calls to MarkEdit's
-runtime:
+## MarkEdit-preview
 
-```bash
-esbuild extensions/color-highlight/src/color-highlight.js \
-    --bundle --format=iife --platform=node \
-    --external:markedit-api \
-    --external:@codemirror/view \
-    --external:@codemirror/state \
-    --outfile=extensions/color-highlight/color-highlight.js
-```
+Deleted:
 
-esbuild emits a `__require` preamble that delegates to a real `require` when one
-is defined. MarkEdit's WebView defines one, and so does the `node:vm` sandbox the
-tests build, so the generated file runs unchanged in both.
+- `src/features/colorHighlight.ts`
+- `src/shared/color.ts`
+- `tests/colorHighlight.test.ts`
+- `tests/color.test.ts`
+- `styles/color-literal.css`
 
-The extension source keeps what is its own — `editorBackground`, `mark`,
-`buildDecorations`, the `ViewPlugin`, the menu item, and the `settings.json`
-persistence — and loses roughly 180 lines of parser.
+Changed:
 
-New in the repository: `esbuild` as a pinned devDependency, `markedit-css-colors`
-as its first runtime dependency, and a `build` script. The generated file is
-added to the oxlint and oxfmt ignore lists.
+- `src/view.ts` — the `colorLiteralCss` import, the `appendStyle(colorLiteralCss())` call at line 45, and the two
+  `paintColorLiterals` calls (the `onColorSchemeChange` handler and `renderHtmlPreview`)
+- `src/styling.ts` — the `colorLiteralBase` import and the `colorLiteralCss` function
+- `src/support/settings.ts` — the `colorHighlight` export
+- `src/support/colorScheme.ts` — `previewBackground` and the `BLACK`/`WHITE` constants that only it uses; the import
+  moves to `markedit-css-colors`, keeping `parseColor`, `isDarkColor` and the `RGBA` type for `surfaceBackground` and
+  `resolveColorScheme`
+- `package.json` — `markedit-css-colors` as a dependency
+- `README.md` — the "Color literals" section and the `colorHighlight` settings entry become a pointer to the extension
 
-A test rebuilds the extension to a temporary file and asserts that it is
-byte-identical to the committed one, so a stale drop-in fails `npm test` instead
-of shipping.
+`surfaceBackground` stays. It is the fork's own light/dark resolution, used by `view.ts`, `render.ts`, `search.ts`,
+`mermaid.ts` and `quicklook/ui.ts`, and it has nothing to do with painting literals.
 
-### MarkEdit-preview
-
-`src/shared/color.ts` is deleted and `markedit-css-colors` is added as a
-dependency. Three files change their import path:
-
-- `src/features/colorHighlight.ts` — `contrastColor`, `findColors`,
-  `toCssColor`, and the `RGBA` type
-- `src/support/colorScheme.ts` — `isDarkColor`, `parseColor`, and the `RGBA` type
-- `tests/color.test.ts` — deleted; see below
-
-Vite bundles the ESM `dist` the way it bundles any dependency, so the
-single-file build is unaffected.
-
-## Tests
-
-The extension's suite is 544 lines. Roughly 200 of them test the parser through
-CodeMirror decorations: hex lengths, the word-boundary refusals, the
-line-opening refusal, functional forms in both syntaxes, percentage channels,
-clamping, alpha in all four spellings, HSL conversion, hue units, and the
-compositing of a transparent colour. The preview's `tests/color.test.ts` is 103
-lines over the same ground, less thoroughly.
-
-Both sets move to the library and are merged there as direct calls on
-`parseColor`, `findColors`, `luminance` and `contrastColor`. This is a careful
-port: every case that exists today must exist after, because the extension's
-suite is the only thorough description of what the parser refuses and why.
-
-Each consumer keeps a suite for its own painting layer.
-
-The extension keeps every menu, toggle and `settings.json` test unchanged, plus
-a small set that proves wiring rather than parsing:
-
-- a literal paints, with the style string the extension writes
-- a dark colour takes white text
-- offsets track a literal on a later line
-- a line outside the visible ranges is not scanned
-- the background walk-up reads an ancestor, and falls back to white
-- `refuseLineOpeningHex: true` is passed — a hex that opens a line paints
-  nothing, and an `rgb()` that opens a line paints
-
-The preview keeps `tests/colorHighlight.test.ts` and `tests/colorScheme.test.ts`
-as they are and deletes `tests/color.test.ts`.
+The fork ends up closer to upstream by 500-odd lines, which is the point of the arrangement.
 
 ## Sequencing
 
-1. The library repository: tooling and gates first, committed, then the parser
-   and its tests.
-2. `markedit-extensions` and `MarkEdit-preview` are wired to
-   `file:../MarkEdit-CSS-Colors` and each is brought green.
-3. The GitHub repository is created and pushed by hand.
-4. The library is tagged `v1.0.0` and both `package.json` files are moved to
+1. `MarkEdit-CSS-Colors`: tooling and gates, committed. Then the parser and its tests, then the editor half, then the
+   preview half.
+2. `markedit-extensions`: delete the extension, update the docs, bump the version.
+3. `MarkEdit-preview`: wired to `file:../MarkEdit-CSS-Colors`, brought green.
+4. The GitHub repository is created and pushed by hand.
+5. The extension is tagged `v1.0.0` and `MarkEdit-preview` moves to
    `https://github.com/andybp85/MarkEdit-CSS-Colors#v1.0.0`.
 
-Steps 1 and 2 are independent of any network access. Step 4 is a two-line change
-in two repositories.
+Steps 1 to 3 need no network. Step 5 is a one-line change in one repository.
 
-## Documentation
-
-- The library gets a `README.md` describing the surface and the two consumers.
-- `markedit-extensions/README.md`: the "no build step" paragraph, the repository
-  layout, the "Add an extension" instructions, and the Test section.
-- `extensions/color-highlight/README.md`: the Develop section, which today says
-  the tests load the drop-in script and must now also say where the parser lives
-  and that the drop-in is generated.
-- `MarkEdit-preview/README.md`: only if it names `shared/color.ts`.
+Nothing is deleted from `markedit-extensions` or `MarkEdit-preview` until the new extension is green, so there is no
+window in which the feature exists nowhere.
 
 ## Risks
 
-**Coverage lost in the test port.** The largest piece of work is moving 300
-lines of parser tests written against decorations into tests written against
-functions. A case dropped in translation is a refusal that silently stops being
-checked. Mitigation: port case by case, and count.
+**Coverage lost in the test port.** The largest single piece of work is moving 300 lines of parser tests written
+against CodeMirror decorations into tests written against functions. A case dropped in translation is a refusal that
+silently stops being checked. Mitigation: port case by case, and count.
 
-**A stale generated drop-in.** Someone edits `src/color-highlight.js`, forgets
-the build, and commits a drop-in that does not match. Mitigation: the
-byte-equality test in `npm test`, which the pre-commit guard runs.
+**The preview's markup is not an interface.** `.markdown-body` and `innerHTML` replacement are implementation details
+of MarkEdit-preview, and a future release may change them. This is the same bet `MarkEdit-bidirectional-preview-sync`
+makes, and its README says so plainly. Mitigation: the preview half is best-effort by construction — when the selector
+finds nothing, the editor half is unaffected — and the README says the same thing.
 
-**esbuild output churn.** An esbuild upgrade can change the generated file
-without any source change, which shows up as a diff nobody asked for.
-Mitigation: the version is pinned exactly, as oxlint and oxfmt are.
+**The observer feedback loop.** Getting the disconnect-and-drain wrong is an infinite repaint, which in a
+`MutationObserver` presents as the app going unresponsive rather than as a failing test. Mitigation: a test that counts
+paints across one render.
+
+**Two artifacts from one build.** `vite build` and `tsc` write into the same `dist/`. Mitigation: separate
+subdirectories, and a `.gitignore` that names both committed paths explicitly.
 
 ## Not doing
 
-- Sharing the background readers. The extension walks up from
-  `view.contentDOM`; the preview has `previewBackground`. They could be
-  unified, and unifying them is a change to two behaviours rather than a move.
-- Sharing the painters. A CodeMirror decoration builder and a DOM `TreeWalker`
-  have nothing in common but the parser, and putting them in one package would
-  give it a `@codemirror/*` dependency for the benefit of one of its two
-  consumers.
-- Named colours, `lab()`, `oklch()`. Not supported today; extraction is not the
-  moment to add them.
+- An SPI in MarkEdit-preview. DOM discovery needs no changes there, works against upstream, and keeps the fork
+  shrinking rather than growing.
+- Sharing `src/scheme.ts` with the fork's `support/colorScheme.ts`. They resolve the same question from the same
+  signals, but one is a fork's internal module with five callers and the other is 20 lines in an extension. Unifying
+  them is a change to two behaviours rather than a move.
+- Named colours, `lab()`, `oklch()`. Not supported today; a move is not the moment to add them.
+- Painting anything in MarkEdit's own UI outside the editor and the preview pane.
