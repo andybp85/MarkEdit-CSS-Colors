@@ -7,11 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### Changed
-
-- The menu item is now **Extensions → Highlight CSS Colors**. The `extension.cssColors` settings key is unchanged.
-
-## [1.0.0] - 2026-09-04
+## [1.0.0] - 2026-09-05
 
 ### Added
 
@@ -23,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The menu item is **Extensions → Highlight CSS Colors**, kept on and off in the `extension.cssColors` key of
+  `settings.json`.
 - Replaces the `color-highlight` extension of `markedit-extensions` and the colour painting of the `MarkEdit-preview`
   fork. Neither `extension.colorHighlight` nor `extension.markeditPreview.colorHighlight` is migrated; set
   `extension.cssColors` instead.
