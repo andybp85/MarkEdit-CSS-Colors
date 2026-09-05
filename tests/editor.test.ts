@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it } from 'vitest'
-import { EditorState } from '@codemirror/state'
-import { buildDecorations, repaintEffect } from '../src/editor'
+import { EditorState, StateEffect } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
+import { buildDecorations, colorEditorExtension, repaintEffect } from '../src/editor'
 import type { DecorationSource } from '../src/editor'
 
 // The exact style string the extension writes, so a test names a colour once.
@@ -98,5 +99,44 @@ describe('repaintEffect', () => {
     it('is recognised only by itself', () => {
         const effect = repaintEffect.of(undefined)
         expect(effect.is(repaintEffect)).toBe(true)
+    })
+})
+
+// A real EditorView, unlike the duck-typed DecorationSource above, is what it
+// takes to drive ViewPlugin.update(): buildDecorations only proves the paint is
+// correct once built, not that colorEditorExtension rebuilds it at the right
+// moments. happy-dom gives CodeMirror enough DOM to construct and dispatch
+// against without a layout, which is all this needs.
+describe('colorEditorExtension', () => {
+    function editorViewOf(text: string, isEnabled: () => boolean) {
+        const container = document.createElement('div')
+        document.body.appendChild(container)
+        const state = EditorState.create({ doc: text, extensions: [colorEditorExtension(isEnabled)] })
+        return new EditorView({ parent: container, state })
+    }
+
+    function swatchCount(view: EditorView) {
+        return view.contentDOM.querySelectorAll('[style*="background-color"]').length
+    }
+
+    it('rebuilds the decorations when a transaction carries the repaint effect', () => {
+        let enabled = true
+        const view = editorViewOf('a #ff0000', () => enabled)
+        expect(swatchCount(view)).toBe(1)
+
+        enabled = false
+        view.dispatch({ effects: repaintEffect.of(undefined) })
+        expect(swatchCount(view)).toBe(0)
+    })
+
+    it('does not rebuild for an effect of another type', () => {
+        let enabled = true
+        const view = editorViewOf('a #ff0000', () => enabled)
+        expect(swatchCount(view)).toBe(1)
+
+        enabled = false
+        const unrelated = StateEffect.define<undefined>()
+        view.dispatch({ effects: unrelated.of(undefined) })
+        expect(swatchCount(view)).toBe(1)
     })
 })
