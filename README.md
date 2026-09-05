@@ -59,8 +59,10 @@ This extension replaces two settings that both go away: `extension.colorHighligh
   heading, not the colour `#face`. A functional form opening the same line still paints; the ambiguity is a `#`
   problem only. The preview does not apply this rule: the renderer has already consumed the `#` that would have
   opened a heading, so a literal opening a paragraph or a table cell in rendered HTML is unambiguously a colour.
-- In the preview pane only: text inside `<script>`, `<style>`, `<svg>`, a Mermaid diagram or KaTeX math. Those nodes
-  hold source or layout-derived text rather than prose, and wrapping one in a swatch would move it.
+- Wherever the DOM painter runs — the preview pane, and any other host that imports this package as a library, such
+  as Quick Look — text inside `<script>`, `<style>`, `<svg>`, a Mermaid diagram or KaTeX math. Those nodes hold source
+  or layout-derived text rather than prose, and wrapping one in a swatch would move it. The editor is unaffected: it
+  paints through CodeMirror decorations, not this DOM walk.
 
 ## The preview pane
 
