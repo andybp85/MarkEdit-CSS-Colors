@@ -1,5 +1,5 @@
-import { contrastColor, findColors, parseColor, toCssColor } from './color'
-import type { RGBA } from './color'
+import { contrastColor, findColors, parseColor, toCssColor } from './color.js'
+import type { RGBA } from './color.js'
 
 /** The class every painted literal carries, so a user can restyle a swatch. */
 export const SWATCH_CLASS = 'color-literal'

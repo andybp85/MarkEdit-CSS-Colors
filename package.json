@@ -29,6 +29,7 @@
         "format": "oxfmt",
         "format:check": "oxfmt --check",
         "lint": "oxlint",
+        "postbuild:lib": "cp src/package.json dist/lib/package.json",
         "reload": "osascript -e 'quit app \"MarkEdit\"' -e 'delay 1' -e 'launch app \"MarkEdit\"'",
         "test": "vitest run",
         "typecheck": "tsc --noEmit",

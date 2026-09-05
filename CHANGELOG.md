@@ -20,3 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Replaces the `color-highlight` extension of `markedit-extensions` and the colour painting of the `MarkEdit-preview`
   fork. Neither `extension.colorHighlight` nor `extension.markeditPreview.colorHighlight` is migrated; set
   `extension.cssColors` instead.
+
+### Fixed
+
+- `dist/lib`'s relative imports now carry explicit `.js` extensions, so Node's own ESM resolution (`import()`, not
+  just a bundler) can load the library entry point directly.

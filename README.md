@@ -99,3 +99,10 @@ npm run build:lib     # the library entry point, dist/lib
 
 Both `dist` artifacts are committed. This package is installed as a git dependency, which has no publish step to run
 a build on the consumer's behalf, so the build output has to already be in the repository.
+
+`dist/lib` is real ESM — Node's own `import()` needs to resolve it directly, not just a bundler. `src/package.json`
+marks the source tree as a module scope so `tsc -p tsconfig.lib.json` requires and emits explicit `.js` extensions on
+relative imports (`nodenext` module resolution), and `postbuild:lib` copies it into `dist/lib` so Node treats the
+built files the same way at run time. The root `package.json` stays typeless on purpose: `npm run build`'s CommonJS
+user script would otherwise be renamed `dist/markedit-css-colors.cjs`, which is not the path this repository commits
+to.

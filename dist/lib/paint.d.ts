@@ -1,4 +1,4 @@
-import type { RGBA } from './color';
+import type { RGBA } from './color.js';
 /** The class every painted literal carries, so a user can restyle a swatch. */
 export declare const SWATCH_CLASS = "color-literal";
 /** The whole of the swatch stylesheet. The colours themselves are inline, per literal. */
