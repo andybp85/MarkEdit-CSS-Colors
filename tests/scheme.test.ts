@@ -82,6 +82,36 @@ describe('onSchemeChange', () => {
     })
 })
 
+describe('staggered subscription race', () => {
+    it('still notifies an earlier listener whose frame is pending when a later one subscribes first', async () => {
+        const { onSchemeChange } = await scheme()
+        const first = vi.fn()
+        const releaseFirst = onSchemeChange(first)
+
+        editor.style.backgroundColor = 'rgb(0, 0, 0)'
+
+        // The MutationObserver callback runs as a microtask (spec, and happy-dom's
+        // implementation); two ticks let it run scheduleUpdate() — which reserves
+        // the animation frame — without letting that frame itself fire yet. A
+        // second listener then joins while the reschedule is still in flight.
+        await Promise.resolve()
+        await Promise.resolve()
+
+        const second = vi.fn()
+        const releaseSecond = onSchemeChange(second)
+        await settle()
+
+        // The pending frame is the only place this change is ever reported: a
+        // shared baseline resynced by the later subscribe would make the frame
+        // see no change from live truth, and the first listener would never
+        // hear about a scheme change it is still owed.
+        expect(first).toHaveBeenCalledTimes(1)
+
+        releaseFirst()
+        releaseSecond()
+    })
+})
+
 describe('teardown accounting', () => {
     it('the last of several releases tears tracking down, not just the count', async () => {
         const { onSchemeChange } = await scheme()
