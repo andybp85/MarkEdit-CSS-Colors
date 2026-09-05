@@ -80,7 +80,7 @@ describe('the entry point', () => {
     it('adds the editor extension and the menu item', () => {
         expect(host.extensions).toHaveLength(1)
         expect(host.menuItems).toHaveLength(1)
-        expect(host.menuItems[0].title).toBe('Highlight Colors')
+        expect(host.menuItems[0].title).toBe('Highlight CSS Colors')
     })
 
     it('injects the swatch stylesheet one time', () => {

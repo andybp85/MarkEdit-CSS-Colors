@@ -1,5 +1,5 @@
 /** The menu item, a checkbox. It is also the title of every alert this extension raises. */
-export const MENU_TITLE = 'Highlight Colors'
+export const MENU_TITLE = 'Highlight CSS Colors'
 
 /**
  * MarkEdit-preview's live pane. Not an interface it publishes — it is the class

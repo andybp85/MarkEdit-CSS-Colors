@@ -139,7 +139,7 @@ describe('persistEnabled', () => {
         expect(host.created).toEqual([])
         expect(host.alerts).toHaveLength(1)
         expect(host.alerts[0].message).toMatch(/settings\.json/)
-        expect(host.alerts[0].title).toBe('Highlight Colors')
+        expect(host.alerts[0].title).toBe('Highlight CSS Colors')
     })
 
     it('alerts and writes nothing for a settings.json holding a non-object', async () => {

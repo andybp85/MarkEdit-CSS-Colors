@@ -36,7 +36,7 @@ case-insensitive, so `RGB(255, 0, 0)` paints too.
 
 ## Configure
 
-**Extensions → Highlight Colors** is a checkbox that turns painting on and off in both the editor and the preview
+**Extensions → Highlight CSS Colors** is a checkbox that turns painting on and off in both the editor and the preview
 pane at once. Its state lives in `settings.json`, under the `extension.cssColors` key's `enabled` field.
 
 This extension replaces two settings that both go away: `extension.colorHighlight` and

@@ -33,7 +33,7 @@ describe('installMenu', () => {
         installMenu(controllerOver(true))
 
         expect(registered).toHaveLength(1)
-        expect(registered[0].title).toBe('Highlight Colors')
+        expect(registered[0].title).toBe('Highlight CSS Colors')
     })
 
     it('draws its checkmark from the controller', () => {
