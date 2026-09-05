@@ -25,6 +25,7 @@
     "scripts": {
         "build": "vite build",
         "build:lib": "tsc -p tsconfig.lib.json",
+        "postbuild": "npm run build:lib",
         "format": "oxfmt",
         "format:check": "oxfmt --check",
         "lint": "oxlint",
