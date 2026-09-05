@@ -1,4 +1,5 @@
 {
+    "ignorePatterns": ["dist/markedit-css-colors.js"],
     "rules": {
         "curly": ["error", "multi"],
         "no-console": ["error", { "allow": ["warn", "error"] }],
